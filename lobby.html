@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>多元综合大厅中心</title>
+    <script src="https://telegram.org"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #0b0e14; color: #fff; font-family: sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+        .top-bar { background: #141923; padding: 15px; border-bottom: 2px solid #ffaa00; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .wallet-box { text-align: right; }
+        .balance-value { font-size: 20px; font-weight: bold; color: #00ffcc; }
+        .nav-tabs { display: flex; gap: 8px; padding: 12px 15px; overflow-x: auto; background: #141923; border-bottom: 1px solid #1f2736; }
+        .nav-tabs::-webkit-scrollbar { display: none; }
+        .tab-item { padding: 8px 16px; background: #1f2736; border-radius: 20px; font-size: 13px; font-weight: bold; white-space: nowrap; cursor: pointer; color: #a4b3c6; }
+        .tab-item.active { background: #ffaa00; color: #000; box-shadow: 0 0 10px rgba(255,170,0,0.4); }
+        .content-grid { flex: 1; padding: 15px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        .game-card { background: #1a2233; border-radius: 10px; overflow: hidden; border: 1px solid #25314a; cursor: pointer; text-align: center; padding: 15px 10px; }
+        .game-icon { font-size: 40px; margin-bottom: 10px; }
+        .game-name { font-size: 14px; font-weight: bold; display: block; margin-bottom: 5px; }
+        .game-tag { font-size: 10px; background: #25314a; padding: 2px 6px; border-radius: 4px; color: #ffaa00; }
+        .sys-logger { background: #07090d; padding: 10px 15px; font-size: 11px; font-family: monospace; color: #6a7785; border-top: 1px solid #141923; }
+    </style>
+</head>
+<body>
+
+    <!-- 1. 资产与对账中心 -->
+    <div class="top-bar">
+        <div><span id="p-name" style="font-weight:bold;">玩家账户</span></div>
+        <div class="wallet-box">
+            <div style="font-size: 11px; color: #8a96a3;">单一钱包总额 (USDT)</div>
+            <div id="p-balance" class="balance-value">8,888.00</div>
+        </div>
+    </div>
+
+    <!-- 2. 全板块导航分类开关（彻底锁死产品线） -->
+    <div class="nav-tabs">
+        <div class="tab-item active" onclick="switchTab('slots', this)">🎰 电子游戏</div>
+        <div class="tab-item" onclick="switchTab('fish', this)">🦈 捕鱼品类</div>
+        <div class="tab-item" onclick="switchTab('chess', this)">🃏 棋牌对战</div>
+        <div class="tab-item" onclick="switchTab('sports', this)">⚽ 体育盘口</div>
+        <div class="tab-item" onclick="switchTab('live', this)">💃 真人视讯</div>
+        <div class="tab-item" onclick="switchTab('adult', this)">🔞 福利影院</div>
+    </div>
+
+    <!-- 3. 动态渲染网格大厅 -->
+    <div class="content-grid" id="lobby-grid"></div>
+
+    <!-- 4. 底层接口日志监听 -->
+    <div class="sys-logger" id="sys-logger">[SYSTEM] 多功能 API 网关就绪...</div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        let currentBalance = 8888.00;
+
+        // 统一全品类核心数据库（随时准备接入真实第三方API）
+        const DB = {
+            slots: [
+                { name: "麻将胡了", icon: "🀄", provider: "PG电子" },
+                { name: "赏金女王", icon: "🤠", provider: "PG电子" }
+            ],
+            fish: [
+                { name: "欢乐捕鱼王", icon: "🔱", provider: "JILI捕鱼" },
+                { name: "海王捕鱼", icon: "🔱", provider: "FC捕鱼" }
+            ],
+            chess: [
+                { name: "抢庄牛牛", icon: "🐂", provider: "开元棋牌" },
+                { name: "德州扑克", icon: "🃏", provider: "乐游棋牌" }
+            ],
+            sports: [
+                { name: "皇冠体育盘口", icon: "⚽", provider: "CROWN大盘" },
+                { name: "沙巴体育盘口", icon: "🏀", provider: "SABA数据" }
+            ],
+            live: [
+                { name: "AG旗舰真人厅", icon: "🎥", provider: "AG视讯" },
+                { name: "BG性感视讯", icon: "👠", provider: "BG视讯" }
+            ],
+            adult: [
+                { name: "高清福利区A", icon: "🎬", provider: "4K切片流" },
+                { name: "午夜直播热舞", icon: "🍓", provider: "Live直播" }
+            ]
+        };
+
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            document.getElementById('p-name').innerText = tg.initDataUnsafe.user.first_name;
+        }
+
+        function switchTab(cat, element) {
+            document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+            if(element) element.classList.add('active');
+
+            const grid = document.getElementById('lobby-grid');
+            grid.innerHTML = '';
+
+            (DB[cat] || []).forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'game-card';
+                card.onclick = () => callSeamlessAPI(item.name, item.provider);
+                card.innerHTML = `
+                    <div class="game-icon">${item.icon}</div>
+                    <span class="game-name">${item.name}</span>
+                    <span class="game-tag">${item.provider}</span>
+                `;
+                grid.appendChild(card);
+            });
+            document.getElementById('sys-logger').innerText = `[GATEWAY] 成功切换至 [${cat}] 板块，等待接口调用。`;
+        }
+
+        // 核心：模拟单一钱包（Seamless API）握手，扣款提权启动
+        function callSeamlessAPI(name, provider) {
+            document.getElementById('sys-logger').innerText = `[API] 正在握手 ${provider} 的安全鉴权中心...`;
+            setTimeout(() => {
+                document.getElementById('sys-logger').innerText = `[SUCCESS] 成功生成单一钱包Token！已内嵌启动: ${name}`;
+                alert(`正在通过安全接口，拉起第三方游戏页面：\n[${provider} - ${name}]\n数据资产对账流已锁定。`);
+            }, 300);
+        }
+
+        // 初始化默认显示电子游戏
+        window.onload = () => { switchTab('slots', null); };
+    </script>
+</body>
+</html>
