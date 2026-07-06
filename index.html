@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Matrix International Universal Lobby</title>
+    <!-- 电报官方核心脚本框架 -->
+    <script src="https://telegram.org"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body { background: #0b0e14; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+        
+        /* 顶部玩家钱包与数据中心 */
+        .top-bar { background: #141923; padding: 15px; border-bottom: 2px solid #ffaa00; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .user-meta { display: flex; flex-direction: column; gap: 4px; }
+        .user-id { font-size: 14px; color: #8a96a3; }
+        .wallet-box { display: flex; flex-direction: column; align-items: flex-end; }
+        .balance-label { font-size: 11px; color: #8a96a3; }
+        .balance-value { font-size: 20px; font-weight: bold; color: #00ffcc; }
+
+        /* 快捷充提金流按钮组 */
+        .action-row { display: flex; gap: 10px; padding: 12px 15px; background: #111622; }
+        .action-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: bold; font-size: 14px; cursor: pointer; text-align: center; }
+        .btn-deposit { background: linear-gradient(135deg, #00ffcc 0%, #00b386 100%); color: #000; }
+        .btn-withdraw { background: #222b3d; color: #ffaa00; border: 1px solid #ffaa00; }
+
+        /* 全板块切换标签（电子/捕鱼/棋牌/体育/真人/成人影视） */
+        .nav-tabs { display: flex; gap: 8px; padding: 10px 15px; overflow-x: auto; background: #141923; border-bottom: 1px solid #1f2736; }
+        .nav-tabs::-webkit-scrollbar { display: none; }
+        .tab-item { padding: 8px 16px; background: #1f2736; border-radius: 20px; font-size: 13px; font-weight: bold; white-space: nowrap; cursor: pointer; color: #a4b3c6; transition: 0.2s; }
+        .tab-item.active { background: #ffaa00; color: #000; box-shadow: 0 0 10px rgba(255,170,0,0.4); }
+
+        /* 内容渲染网格面板 */
+        .content-grid { flex: 1; padding: 15px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        .game-card { background: #1a2233; border-radius: 10px; overflow: hidden; position: relative; border: 1px solid #25314a; cursor: pointer; }
+        .game-cover { width: 100%; height: 110px; background: #2c3852; display: flex; align-items: center; justify-content: center; font-size: 32px; color: #8a96a3; object-fit: cover; }
+        .game-info { padding: 8px; font-size: 13px; font-weight: bold; display: flex; justify-content: space-between; }
+        .game-tag { font-size: 10px; background: #25314a; padding: 2px 5px; border-radius: 4px; color: #ffaa00; }
+
+        /* 模态框底层（充提、注册界面弹窗） */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-box { background: #1a2233; border-radius: 12px; width: 85%; max-width: 400px; padding: 20px; border: 1px solid #3b4d73; position: relative; }
+        .modal-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #ffaa00; text-align: center; }
+        .input-group { margin-bottom: 12px; }
+        .input-group label { display: block; font-size: 12px; color: #8a96a3; margin-bottom: 4px; }
+        .input-group input { width: 100%; padding: 12px; background: #0b0e14; border: 1px solid #2c3852; border-radius: 6px; color: #fff; font-size: 14px; }
+        .modal-close { position: absolute; top: 10px; right: 15px; font-size: 20px; color: #8a96a3; cursor: pointer; }
+
+        /* 底层通告日志显示器 */
+        .sys-logger { background: #07090d; padding: 8px 15px; font-size: 11px; font-family: monospace; color: #6a7785; border-top: 1px solid #141923; }
+    </style>
+</head>
+<body>
+
+    <!-- 1. 顶部玩家数据与单一钱包资产池 -->
+    <div class="top-bar">
+        <div class="user-meta">
+            <span id="player-name" style="font-weight: bold; font-size: 16px;">游客账户</span>
+            <span id="player-id" class="user-id">ID: 000000</span>
+        </div>
+        <div class="wallet-box">
+            <span class="balance-label">实时综合账户 (USDT)</span>
+            <span id="player-balance" class="balance-value">0.00</span>
+        </div>
+    </div>
+
+    <!-- 2. 快捷金流出入款通道 -->
+    <div class="action-row">
+        <button class="action-btn btn-deposit" onclick="openModal('deposit')">⚡ TRC20 自动充值</button>
+        <button class="action-btn btn-withdraw" onclick="openModal('withdraw')">🏧 自动化提现</button>
+    </div>
+
+    <!-- 3. 全板块路由导航栏 (电子/捕鱼/棋牌/体育/真人/成人影视) -->
+    <div class="nav-tabs">
+        <div class="tab-item active" onclick="switchCategory('slots', this)">🎰 电子游戏</div>
+        <div class="tab-item" onclick="switchCategory('fish', this)">🦈 捕鱼捕鸟</div>
+        <div class="tab-item" onclick="switchCategory('chess', this)">🃏 棋牌对战</div>
+        <div class="tab-item" onclick="switchCategory('sports', this)">⚽ 体育盘口</div>
+        <div class="tab-item" onclick="switchCategory('live', this)">💃 真人视讯</div>
+        <div class="tab-item" onclick="switchCategory('adult_vod', this)">🔞 福利影院</div>
+    </div>
+
+    <!-- 4. 动态渲染核心网格大厅 -->
+    <div class="content-grid" id="lobby-grid">
+        <!-- 动态数据将通过下方的 JavaScript 逻辑秒级塞入 -->
+    </div>
+
+    <!-- 5. 金流与账目模块弹窗面板 -->
+    <div class="modal-overlay" id="system-modal">
+        <div class="modal-box">
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <div id="modal-content-area"></div>
+        </div>
+    </div>
+
+    <!-- 6. 底层数据对账流水日志 -->
+    <div class="sys-logger" id="sys-logger">
+        [SYSTEM] 正在监听大厅 API 核心网关...
+    </div>
+
+    <script>
+        // 1. 初始化电报底层安全上下文
+        const tg = window.Telegram.WebApp;
+        tg.expand(); 
+
+        let userBalance = 5000.00; // 模拟初始资金池
+        document.getElementById('player-balance').innerText = userBalance.toFixed(2);
+
+        // 2. 瞬间抓取电报账号并执行“无感账号注册/登录”底层逻辑
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            const u = tg.initDataUnsafe.user;
+            document.getElementById('player-name').innerText = u.first_name;
+            document.getElementById('player-id').innerText = `TG-ID: ${u.id}`;
+            writeLog(`[AUTH] 电报无感安全登录验证成功: ${u.first_name}`);
+        } else {
+            document.getElementById('player-id').innerText = `SANDBOX-DEV`;
+            writeLog(`[AUTH] 本地测试环境启动，已自动分配沙盒虚拟账户。`);
+        }
+
+        // 3. 全品类游戏及成人影视数据库存储流
+        const GLOBAL_DATABASE = {
+            slots: [
+                { name: "麻将胡了", icon: "🀄", provider: "PG电子", rtp: "96.7%" },
+                { name: "赏金女王", icon: "🤠", provider: "PG电子", rtp: "96.5%" },
+                { name: "阿兹特克寻宝", icon: "🗿", provider: "PG电子", rtp: "95.8%" }
+            ],
+            fish: [
+                { name: "欢乐捕鱼王", icon: "🔱", provider: "JILI捕鱼", rtp: "97.0%" },
+                { name: "龙王捕鱼", icon: "🐉", provider: "FC捕鱼", rtp: "96.2%" }
+            ],
+            chess: [
+                { name: "抢庄牛牛", icon: "🐂", provider: "开元棋牌", rtp: "P2P" },
+                { name: "德州扑克", icon: "🃏", provider: "乐游棋牌", rtp: "P2P" }
+            ],
+            sports: [
+                { name: "皇冠体育盘口", icon: "⚽", provider: "CROWN", rtp: "实时赔率" },
+                { name: "沙巴体育大盘", icon: "🏀", provider: "SABA", rtp: "数据Feed" }
+            ],
+            live: [
+                { name: "AG旗舰真人", icon: "🎥", provider: "AG视讯", rtp: "超低延迟" },
+                { name: "BG视讯厅", icon: "👠", provider: "BG视讯", rtp: "真人荷官" }
+            ],
+            adult_vod: [
+                { name: "福利精品影视 A", icon: "🎬", provider: "高清 4K", rtp: "已解锁" },
+                { name: "成人午夜直播间", icon: "🍓", provider: "高颜主播", rtp: "Live流" },
+                { name: "欧美激情大片", icon: "💋", provider: "中文字幕", rtp: "已解锁" }
+            ]
+        };
+
+        // 4. 大厅全板块动态渲染逻辑
+        function switchCategory(category, element) {
+            // 切换标签高亮
+            document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+            if(element) element.classList.add('active');
+
+            const grid = document.getElementById('lobby-grid');
+            grid.innerHTML = ''; // 清空大厅
+
+            const items = GLOBAL_DATABASE[category] || [];
+            items.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'game-card';
+                card.onclick = () => launchInterface(item.name, item.provider, category);
+                card.innerHTML = `
+                    <div class="game-cover">${item.icon}</div>
+                    <div class="game-info">
+                        <span>${item.name}</span>
+                        <span class="game-tag">${item.provider}</span>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+            writeLog(`[GATEWAY] 大厅成功切换路由至 [${category}] 线路`);
+        }
+
+        // 5. 核心接口启动逻辑 (Seamless API 加载原理)
+        function launchInterface(name, provider, cat) {
+            writeLog(`[API] 正在呼叫 ${provider} 的单一钱包加密对接授权接口...`);
+            if (userBalance < 10) {
+                alert("主账户资金池不足，请先进行 TRC-20 充值结算！");
+                return;
+            }
+            writeLog(`[SUCCESS] 成功握手！生成游戏安全 Token，正在内嵌启动: ${name}`);
+            alert(`正在通过 API 安全加载并进入：\n[${provider} - ${name}]\n底层的单一钱包账目同步已开启。`);
+        }
+
+        // 6. 自动化充值、提现逻辑界面弹窗
+        function openModal(type) {
+            const overlay = document.getElementById('system-modal');
+            const content = document.getElementById('modal-content-area');
+            overlay.style.display = 'flex';
+
+            if (type === 'deposit') {
+                content.innerHTML = `
