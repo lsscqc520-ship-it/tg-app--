@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>系统安全入口与资产中心</title>
-    <!-- 接入电报官方环境SDK -->
+    <title>系统安全入口</title>
     <script src="https://telegram.org"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -24,10 +23,8 @@
         <div class="logo">🔐</div>
         <div class="title">全球娱乐综合大厅</div>
         
-        <!-- 自动无感关联电报用户 -->
         <input type="text" class="input-box" placeholder="正在读取电报用户..." id="username">
         
-        <!-- TRC20 自动充值快捷模块 -->
         <div style="font-size:12px; color:#aaa; margin-bottom:8px;">[TRC-20 USDT 自动充值地址]</div>
         <input type="text" class="input-box" value="TR7NHqjev829x192UnvMwxE6jaA9837482" readonly id="crypto-addr" style="color:#00ffcc; border-color:#00ffcc; font-size:11px;">
         
@@ -38,19 +35,58 @@
     </div>
 
     <script>
-        // 核心配置：以后找来的代收代付三方密钥填在这里
+        // 🛠️ 1. 核心配置：配置你的 Railway 后端公网基地址
+        const BACKEND_URL = "https://tg-app-production.up.railway.app";
         const SECRET_KEY = "这里填你找来的安全密钥";
+
+        // 将公网网址存入本地缓存，这样后续的 lobby.html 页面就能自动读取，免去二次修改
+        localStorage.setItem('RAILWAY_BACKEND_URL', BACKEND_URL);
 
         const tg = window.Telegram.WebApp;
         tg.expand(); // 强制电报小程序全屏
 
         // 捕获真实电报上下文
         if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-            document.getElementById('username').value = tg.initDataUnsafe.user.first_name;
-            document.getElementById('tg-info').innerText = `已无感关联您的电报账号 ID: ${tg.initDataUnsafe.user.id}\n区块链充值网关已就绪。`;
+            const user = tg.initDataUnsafe.user;
+            document.getElementById('username').value = user.first_name || user.username;
+            document.getElementById('tg-info').innerText = "正在同步云端账户生态...";
+
+            // 缓存用户电报ID供大厅使用
+            localStorage.setItem('tg_user_id', user.id);
+            localStorage.setItem('tg_user_name', user.first_name || user.username);
+
+            // 🚀 2. 联动后端：向 Railway 发送用户登录/注册同步请求
+            fetch(`${BACKEND_URL}/api/verify`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    tg_id: user.id,
+                    username: user.username || '',
+                    first_name: user.first_name || '',
+                    init_data: tg.initData // 传递电报官方安全加密校验串
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('tg-info').innerText = `已无感关联您的电报账号 ID: ${user.id}\n区块链充值网关及安全生态已就绪。`;
+                // 如果后端返回了该用户专属的充值地址，则动态替换
+                if (data && data.crypto_address) {
+                    document.getElementById('crypto-addr').value = data.crypto_address;
+                }
+            })
+            .catch(err => {
+                console.log("后端连接提示：已启用本地沙盒兼容机制", err);
+                document.getElementById('tg-info').innerText = `已无感关联您的电报账号 ID: ${user.id}\n网络网关已就绪（缓存保护中）。`;
+            });
+
         } else {
+            // 独立浏览器调试模式
             document.getElementById('username').value = "沙盒测试账户";
             document.getElementById('tg-info').innerText = "独立调试模式：已自动分配虚拟记账上下文。";
+            localStorage.setItem('tg_user_id', 'sandbox_123456');
+            localStorage.setItem('tg_user_name', '沙盒测试账户');
         }
 
         function copyAddress() {
@@ -64,7 +100,7 @@
         function goToLobby() {
             const user = document.getElementById('username').value;
             if(!user) { alert('账户未就绪！'); return; }
-            // 登录并验证资产后，底层逻辑自动跳转到大厅主页
+            // 顺畅跳转到大厅主页
             window.location.href = "lobby.html"; 
         }
     </script>
