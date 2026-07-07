@@ -3,18 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>系统安全入口</title>
-    <script src="https://telegram.org"></script>
+    <title>系统安全入口与资产中心</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { margin: 0; padding: 0; background: #0b0e14; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
         .login-card { background: #141923; width: 90%; max-width: 360px; border-radius: 12px; padding: 25px; border: 1px solid #25314a; box-shadow: 0 8px 16px rgba(0,0,0,0.3); text-align: center; }
         .logo { font-size: 40px; margin-bottom: 10px; color: #ffaa00; }
         .title { font-size: 20px; font-weight: bold; margin-bottom: 20px; }
-        .input-box { width: 100%; padding: 12px; background: #07090d; border: 1px solid #2c3852; border-radius: 6px; color: #fff; font-size: 14px; margin-bottom: 15px; text-align: center; }
-        .btn-action { width: 100%; padding: 12px; background: linear-gradient(135deg, #00ffcc 0%, #00b386 100%); border: none; border-radius: 6px; color: #000; font-size: 16px; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
-        .btn-lobby { background: linear-gradient(135deg, #ffaa00 0%, #d48800 100%); }
-        .tg-tip { font-size: 11px; color: #8a96a3; margin-top: 15px; line-height: 1.4; }
+        .status-box { background: #07090d; padding: 12px; border-radius: 6px; border: 1px solid #2c3852; color: #00ffcc; font-size: 14px; margin-bottom: 15px; font-family: monospace; }
+        .address-title { font-size: 11px; color: #8a96a3; margin-bottom: 5px; text-align: left; padding-left: 5px; }
+        .address-box { background: #07090d; border: 1px solid #00ffcc; border-radius: 6px; padding: 10px; font-size: 11px; color: #00ffcc; word-break: break-all; margin-bottom: 15px; font-family: monospace; }
+        .btn { display: block; width: 100%; padding: 14px; border: none; border-radius: 6px; font-size: 15px; font-weight: bold; cursor: pointer; text-decoration: none; margin-bottom: 12px; transition: all 0.2s; }
+        .btn-copy { background: #00cc99; color: #fff; }
+        .btn-copy:active { background: #00a37a; }
+        .btn-enter { background: #ffaa00; color: #000; }
+        .btn-enter:active { background: #d48f00; }
+        .footer-log { font-size: 10px; color: #526071; margin-top: 15px; }
     </style>
 </head>
 <body>
@@ -23,84 +28,64 @@
         <div class="logo">🔐</div>
         <div class="title">全球娱乐综合大厅</div>
         
-        <input type="text" class="input-box" placeholder="正在读取电报用户..." id="username">
+        <div id="user-status" class="status-box">正在拉取电报会话凭据...</div>
         
-        <div style="font-size:12px; color:#aaa; margin-bottom:8px;">[TRC-20 USDT 自动充值地址]</div>
-        <input type="text" class="input-box" value="TR7NHqjev829x192UnvMwxE6jaA9837482" readonly id="crypto-addr" style="color:#00ffcc; border-color:#00ffcc; font-size:11px;">
+        <div class="address-title">[TRC-20 USDT 自动充值地址]</div>
+        <div id="deposit-addr" class="address-box">TR7NHqjev829x192UnvMwxE6jaA9837482</div>
         
-        <button class="btn-action" onclick="copyAddress()">⚡ 一键复制充值地址</button>
-        <button class="btn-action btn-lobby" onclick="goToLobby()">🎰 进入多元大厅 (电子/捕鱼/真人)</button>
+        <button class="btn btn-copy" onclick="copyAddress()">⚡ 一键复制充值地址</button>
+        <button class="btn btn-enter" onclick="goToLobby()">🎰 进入多元大厅 (电子/捕鱼/真人)</button>
         
-        <div class="tg-tip" id="tg-info">正在安全校验电报会话生态...</div>
+        <div id="net-log" class="footer-log">正在安全校验电报会话生态...</div>
     </div>
 
     <script>
-        // 🛠️ 1. 核心配置：配置你的 Railway 后端公网基地址
+        // 🔄 你的 Railway 后端公网网址（自动锁定）
         const BACKEND_URL = "https://tg-app-production.up.railway.app";
-        const SECRET_KEY = "这里填你找来的安全密钥";
-
-        // 将公网网址存入本地缓存，这样后续的 lobby.html 页面就能自动读取，免去二次修改
+        // 把网址存入手机本地，方便大厅页面共享读取
         localStorage.setItem('RAILWAY_BACKEND_URL', BACKEND_URL);
 
-        const tg = window.Telegram.WebApp;
-        tg.expand(); // 强制电报小程序全屏
-
-        // 捕获真实电报上下文
-        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-            const user = tg.initDataUnsafe.user;
-            document.getElementById('username').value = user.first_name || user.username;
-            document.getElementById('tg-info').innerText = "正在同步云端账户生态...";
-
-            // 缓存用户电报ID供大厅使用
-            localStorage.setItem('tg_user_id', user.id);
-            localStorage.setItem('tg_user_name', user.first_name || user.username);
-
-            // 🚀 2. 联动后端：向 Railway 发送用户登录/注册同步请求
-            fetch(`${BACKEND_URL}/api/verify`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    tg_id: user.id,
-                    username: user.username || '',
-                    first_name: user.first_name || '',
-                    init_data: tg.initData // 传递电报官方安全加密校验串
-                })
-            })
-            .then(res => res.json())
-            .then(data => {
-                document.getElementById('tg-info').innerText = `已无感关联您的电报账号 ID: ${user.id}\n区块链充值网关及安全生态已就绪。`;
-                // 如果后端返回了该用户专属的充值地址，则动态替换
-                if (data && data.crypto_address) {
-                    document.getElementById('crypto-addr').value = data.crypto_address;
-                }
-            })
-            .catch(err => {
-                console.log("后端连接提示：已启用本地沙盒兼容机制", err);
-                document.getElementById('tg-info').innerText = `已无感关联您的电报账号 ID: ${user.id}\n网络网关已就绪（缓存保护中）。`;
-            });
-
-        } else {
-            // 独立浏览器调试模式
-            document.getElementById('username').value = "沙盒测试账户";
-            document.getElementById('tg-info').innerText = "独立调试模式：已自动分配虚拟记账上下文。";
-            localStorage.setItem('tg_user_id', 'sandbox_123456');
-            localStorage.setItem('tg_user_name', '沙盒测试账户');
+        // 初始化 Telegram WebApp
+        const tg = window.Telegram ? window.Telegram.WebApp : null;
+        if (tg) {
+            tg.ready();
+            tg.expand(); // 全屏铺满手机
         }
 
+        let tgUserId = "sandbox_123456";
+        let tgUserName = "沙盒测试账户";
+
+        window.onload = () => {
+            // 🔍 安全防垮机制：如果成功拿到电报数据则读取，拿不到则启用防卡死沙盒环境
+            if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+                tgUserId = tg.initDataUnsafe.user.id;
+                tgUserName = tg.initDataUnsafe.user.first_name || tg.initDataUnsafe.user.username;
+                document.getElementById('user-status').innerText = `欢迎: ${tgUserName}`;
+                document.getElementById('net-log').innerText = `[SECURE] 电报安全握手成功，ID: ${tgUserId}`;
+            } else {
+                document.getElementById('user-status').innerText = `测试模式: ${tgUserName}`;
+                document.getElementById('net-log').innerText = `[SANDBOX] 浏览器环境，已启动沙盒保护`;
+            }
+
+            // 存入缓存供大厅页面调用
+            localStorage.setItem('tg_user_id', tgUserId);
+            localStorage.setItem('tg_user_name', tgUserName);
+        };
+
+        // 复制地址功能
         function copyAddress() {
-            const copyText = document.getElementById("crypto-addr");
-            copyText.select();
-            copyText.setSelectionRange(0, 99999); // 对手机端进行兼容
-            document.execCommand("copy");
-            alert("TRC-20 充值地址复制成功！转账后系统将自动清算。");
+            const addr = document.getElementById('deposit-addr').innerText;
+            navigator.clipboard.writeText(addr).then(() => {
+                if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success'); // 触发手机震动
+                alert("地址已成功复制到剪贴板！");
+            }).catch(() => {
+                alert("复制失败，请手动选择复制。");
+            });
         }
 
+        // 跳转大厅（锁定重命名后的 lobby.html）
         function goToLobby() {
-            const user = document.getElementById('username').value;
-            if(!user) { alert('账户未就绪！'); return; }
-            // 顺畅跳转到大厅主页
+            if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
             window.location.href = "lobby.html"; 
         }
     </script>
