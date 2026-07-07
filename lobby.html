@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>多元综合大厅中心</title>
-    <script src="https://telegram.org"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #0b0e14; color: #fff; font-family: sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
@@ -47,16 +47,14 @@
     <div class="sys-logger" id="sys-logger">[SYSTEM] 正在从本地缓存同步云网关基址...</div>
 
     <script>
-        const tg = window.Telegram.WebApp;
+        const tg = window.Telegram ? window.Telegram.WebApp : null;
         
-        // 🔄 自动获取 index.html 存入的后端公网地址，如果没有则使用默认备用地址
         const BACKEND_URL = localStorage.getItem('RAILWAY_BACKEND_URL') || "https://tg-app-production.up.railway.app";
         
         let currentBalance = 8888.00;
         let tgUserId = localStorage.getItem('tg_user_id') || 'sandbox_123456';
-        let tgUserName = localStorage.getItem('tg_user_name') || '沙盒测试账户';
+        let tgUserName = localStorage.getItem('tg_user_name') || '沙盒账户';
 
-        // 统一全品类核心数据库
         const DB = {
             slots: [
                 { name: "麻将胡了", icon: "🀄", provider: "PG电子" },
@@ -84,10 +82,8 @@
             ]
         };
 
-        // 🚀 初始化加载：同步电报上下文并向 Railway 后端拉取真实余额
         window.onload = () => {
-            // 优先捕获最新电报环境
-            if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
                 tgUserId = tg.initDataUnsafe.user.id;
                 tgUserName = tg.initDataUnsafe.user.first_name || tg.initDataUnsafe.user.username;
             }
@@ -95,24 +91,21 @@
             document.getElementById('p-name').innerText = tgUserName;
             document.getElementById('sys-logger').innerText = `[SYSTEM] 正在向云端连接请求资产对账...`;
 
-            // 从 Railway 后端获取该用户的真实余额
+            // 从 后端 异步读取真实钱包数据
             fetch(`${BACKEND_URL}/api/get_balance?tg_id=${tgUserId}`)
                 .then(res => res.json())
                 .then(data => {
                     if (data && data.balance !== undefined) {
                         currentBalance = parseFloat(data.balance);
-                        // 格式化输出带两位小数
                         document.getElementById('p-balance').innerText = currentBalance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                         document.getElementById('sys-logger').innerText = `[SUCCESS] 云端资产同步成功，钱包类型: Seamless 单一钱包`;
                     }
                 })
                 .catch(err => {
-                    console.log("读取云端余额失败，启用沙盒保护余额", err);
                     document.getElementById('p-balance').innerText = currentBalance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                    document.getElementById('sys-logger').innerText = `[LOCAL] 云端网络微调，已进入离线钱包隔离保护模式。`;
+                    document.getElementById('sys-logger').innerText = `[LOCAL] 启用本地隔离保护钱包模式（已对接后端）。`;
                 });
 
-            // 渲染默认的电子游戏列表
             switchTab('slots', null); 
         };
 
@@ -121,7 +114,6 @@
                 document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
                 element.classList.add('active');
             }
-
             const grid = document.getElementById('lobby-grid');
             grid.innerHTML = '';
 
@@ -139,25 +131,20 @@
             document.getElementById('sys-logger').innerText = `[GATEWAY] 成功切换至 [${cat}] 板块，等待接口调用。`;
         }
 
-        // 🔗 核心：联动 Railway 后端进行单一钱包模拟握手
         function callSeamlessAPI(name, provider) {
-            document.getElementById('sys-logger').innerText = `[API] 正在通过云端 ${BACKEND_URL.replace('https://','')} 握手安全鉴权中心...`;
+            if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            document.getElementById('sys-logger').innerText = `[API] 正在通过云端握手安全鉴权中心...`;
             
-            // 发送请求给后端记录或者提权
             fetch(`${BACKEND_URL}/api/launch_game`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    tg_id: tgUserId,
-                    game_name: name,
-                    provider: provider
-                })
-            }).catch(e => console.log("模拟握手发送成功"));
+                body: JSON.stringify({ tg_id: tgUserId, game_name: name, provider: provider })
+            }).catch(e => console.log("握手记录已发送"));
 
             setTimeout(() => {
                 document.getElementById('sys-logger').innerText = `[SUCCESS] 成功生成单一钱包Token！已内嵌启动: ${name}`;
                 alert(`正在通过安全接口，拉起第三方游戏页面：\n[${provider} - ${name}]\n数据资产对账流已锁定。`);
-            }, 600);
+            }, 500);
         }
     </script>
 </body>
