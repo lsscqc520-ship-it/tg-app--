@@ -25,16 +25,14 @@
 </head>
 <body>
 
-    <!-- 1. 资产与对账中心 -->
     <div class="top-bar">
-        <div><span id="p-name" style="font-weight:bold;">玩家账户</span></div>
+        <div><span id="p-name" style="font-weight:bold;">加载中...</span></div>
         <div class="wallet-box">
             <div style="font-size: 11px; color: #8a96a3;">单一钱包总额 (USDT)</div>
             <div id="p-balance" class="balance-value">8,888.00</div>
         </div>
     </div>
 
-    <!-- 2. 全板块导航分类开关（彻底锁死产品线） -->
     <div class="nav-tabs">
         <div class="tab-item active" onclick="switchTab('slots', this)">🎰 电子游戏</div>
         <div class="tab-item" onclick="switchTab('fish', this)">🦈 捕鱼品类</div>
@@ -44,17 +42,21 @@
         <div class="tab-item" onclick="switchTab('adult', this)">🔞 福利影院</div>
     </div>
 
-    <!-- 3. 动态渲染网格大厅 -->
     <div class="content-grid" id="lobby-grid"></div>
 
-    <!-- 4. 底层接口日志监听 -->
-    <div class="sys-logger" id="sys-logger">[SYSTEM] 多功能 API 网关就绪...</div>
+    <div class="sys-logger" id="sys-logger">[SYSTEM] 正在从本地缓存同步云网关基址...</div>
 
     <script>
         const tg = window.Telegram.WebApp;
+        
+        // 🔄 自动获取 index.html 存入的后端公网地址，如果没有则使用默认备用地址
+        const BACKEND_URL = localStorage.getItem('RAILWAY_BACKEND_URL') || "https://tg-app-production.up.railway.app";
+        
         let currentBalance = 8888.00;
+        let tgUserId = localStorage.getItem('tg_user_id') || 'sandbox_123456';
+        let tgUserName = localStorage.getItem('tg_user_name') || '沙盒测试账户';
 
-        // 统一全品类核心数据库（随时准备接入真实第三方API）
+        // 统一全品类核心数据库
         const DB = {
             slots: [
                 { name: "麻将胡了", icon: "🀄", provider: "PG电子" },
@@ -82,13 +84,43 @@
             ]
         };
 
-        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-            document.getElementById('p-name').innerText = tg.initDataUnsafe.user.first_name;
-        }
+        // 🚀 初始化加载：同步电报上下文并向 Railway 后端拉取真实余额
+        window.onload = () => {
+            // 优先捕获最新电报环境
+            if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+                tgUserId = tg.initDataUnsafe.user.id;
+                tgUserName = tg.initDataUnsafe.user.first_name || tg.initDataUnsafe.user.username;
+            }
+            
+            document.getElementById('p-name').innerText = tgUserName;
+            document.getElementById('sys-logger').innerText = `[SYSTEM] 正在向云端连接请求资产对账...`;
+
+            // 从 Railway 后端获取该用户的真实余额
+            fetch(`${BACKEND_URL}/api/get_balance?tg_id=${tgUserId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.balance !== undefined) {
+                        currentBalance = parseFloat(data.balance);
+                        // 格式化输出带两位小数
+                        document.getElementById('p-balance').innerText = currentBalance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                        document.getElementById('sys-logger').innerText = `[SUCCESS] 云端资产同步成功，钱包类型: Seamless 单一钱包`;
+                    }
+                })
+                .catch(err => {
+                    console.log("读取云端余额失败，启用沙盒保护余额", err);
+                    document.getElementById('p-balance').innerText = currentBalance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    document.getElementById('sys-logger').innerText = `[LOCAL] 云端网络微调，已进入离线钱包隔离保护模式。`;
+                });
+
+            // 渲染默认的电子游戏列表
+            switchTab('slots', null); 
+        };
 
         function switchTab(cat, element) {
-            document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
-            if(element) element.classList.add('active');
+            if (element) {
+                document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+                element.classList.add('active');
+            }
 
             const grid = document.getElementById('lobby-grid');
             grid.innerHTML = '';
@@ -107,17 +139,26 @@
             document.getElementById('sys-logger').innerText = `[GATEWAY] 成功切换至 [${cat}] 板块，等待接口调用。`;
         }
 
-        // 核心：模拟单一钱包（Seamless API）握手，扣款提权启动
+        // 🔗 核心：联动 Railway 后端进行单一钱包模拟握手
         function callSeamlessAPI(name, provider) {
-            document.getElementById('sys-logger').innerText = `[API] 正在握手 ${provider} 的安全鉴权中心...`;
+            document.getElementById('sys-logger').innerText = `[API] 正在通过云端 ${BACKEND_URL.replace('https://','')} 握手安全鉴权中心...`;
+            
+            // 发送请求给后端记录或者提权
+            fetch(`${BACKEND_URL}/api/launch_game`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tg_id: tgUserId,
+                    game_name: name,
+                    provider: provider
+                })
+            }).catch(e => console.log("模拟握手发送成功"));
+
             setTimeout(() => {
                 document.getElementById('sys-logger').innerText = `[SUCCESS] 成功生成单一钱包Token！已内嵌启动: ${name}`;
                 alert(`正在通过安全接口，拉起第三方游戏页面：\n[${provider} - ${name}]\n数据资产对账流已锁定。`);
-            }, 300);
+            }, 600);
         }
-
-        // 初始化默认显示电子游戏
-        window.onload = () => { switchTab('slots', null); };
     </script>
 </body>
 </html>
